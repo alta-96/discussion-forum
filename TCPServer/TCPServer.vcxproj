@@ -139,10 +139,14 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="InboundRequestParser.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="MessageBoard.cpp" />
     <ClCompile Include="TCPServer.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="InboundRequestParser.h" />
+    <ClInclude Include="MessageBoard.h" />
     <ClInclude Include="ReceivedSocketData.h" />
     <ClInclude Include="TCPServer.h" />
   </ItemGroup>
