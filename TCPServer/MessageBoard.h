@@ -7,31 +7,19 @@
 
 // Singleton MessageBoard class
 
-namespace MessageBoardSingleton
-{
-    class MessageBoard {
-    private:
-        static MessageBoard* messageBoardInstance;
-        static std::mutex mbMutex;
+class MessageBoard {
 
-        //// each post has a unique hash associated with it to validate existence.
-        //struct PostStruct {
-        //    unsigned int hash;
-        //    std::string message;
-        //    PostStruct(const unsigned int hash, const std::string msg) : hash(hash), message(msg) {}
-        //};
+private:
+    static std::unordered_map<std::string, std::vector<std::string>>* messageBoard;
 
-        static std::unordered_map<std::string, std::vector<std::string>>* messageBoard;
+public:
+    static std::string Post(const std::string& topic, const std::string& messageBody);
+    static std::string Read(const std::string topic, unsigned int messageIndex);
+    /*
+    static std::string List();
+    static unsigned int Count(const std::string topic);
+    */
+};
 
-    public:
-        // Prevent singleton access race-condition.
-        static MessageBoard* GetInstance();
-
-        static std::string Post(const std::string& topic, const std::string& messageBody);
-        static std::string List();
-        static unsigned int Count(const std::string topic);
-        static std::string Read(const std::string topic, unsigned int messageIndex);
-    };
-}
 
 #endif __MESSAGE_BOARD_H
