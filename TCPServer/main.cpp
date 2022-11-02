@@ -108,24 +108,3 @@ std::string Parse(const std::string& incomingReq)
 
 	return "";
 }
-
-
-
-
-/*std::string request = data.request;
-
-if (request.find("EXIT") != std::string::npos || request.find("exit") != std::string::npos)
-{
-	data.socketAlive = false;
-}
-
-if (request.find("POST") != std::string::npos)
-{
-	int count = 0;
-	PostRequest req = PostRequest::parse(data.request);
-	if (req.valid)
-	{
-		count++;
-		data.reply = std::to_string(count);
-	}
-}*/
