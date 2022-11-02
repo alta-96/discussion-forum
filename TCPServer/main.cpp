@@ -6,6 +6,7 @@
 #include "TCPServer.h"
 
 #define DEFAULT_PORT 12345
+
 bool terminateServer = false;
 
 struct PostRequest
@@ -42,7 +43,6 @@ int main()
 		
 	}
 }
-
 
 void ParseIncomingRequest(TCPServer* server, ReceivedSocketData&& data)
 {
