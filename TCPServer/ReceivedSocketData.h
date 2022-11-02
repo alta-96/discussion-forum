@@ -10,10 +10,12 @@ public:
 	SOCKET ClientSocket;
 	std::string request;
 	std::string reply;
+	bool socketAlive;
 
 	ReceivedSocketData()
 	{
 		ClientSocket = INVALID_SOCKET;
+		socketAlive = false;
 	};
 
 	ReceivedSocketData(const ReceivedSocketData &rhs)
@@ -21,6 +23,7 @@ public:
 		this->ClientSocket = rhs.ClientSocket;
 		this->reply = rhs.reply;
 		this->request = rhs.request;
+		socketAlive = true;
 	}
 
 	~ReceivedSocketData() { };
@@ -30,7 +33,7 @@ public:
 		this->ClientSocket = rhs.ClientSocket;
 		this->reply = rhs.reply;
 		this->request = rhs.request;
-
+		socketAlive = true;
 		return *this;
 	}
 

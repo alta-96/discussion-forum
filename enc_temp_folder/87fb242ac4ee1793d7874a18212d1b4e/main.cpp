@@ -10,22 +10,14 @@ bool terminateServer = false;
 
 struct PostRequest
 {
-	PostRequest(const std::string& topic, const std::string& message)
-	: topic(topic), message(message) {}
-	const std::string topic, message;
-};
-
-struct ReadRequest
-{
-	ReadRequest(const std::string& topic, const unsigned int& messageNumber)
-	: topic(topic), messageNumber(messageNumber) {}
-	const std::string topic; const unsigned int messageNumber;
+	std::string _topic;
+	std::string _msg;
+	PostRequest(std::string topic, std::string msg) : _topic(std::move(topic)), _msg(std::move(msg)) {}
 };
 
 void ParseIncomingRequest(TCPServer* server, ReceivedSocketData&& data);
 std::string Parse(const std::string& incomingReq);
 PostRequest ProcessPostRequest(const std::string& request);
-ReadRequest ProcessReadRequest(const std::string& request);
 
 int main()
 {
@@ -57,14 +49,14 @@ void ParseIncomingRequest(TCPServer* server, ReceivedSocketData&& data)
 			} else
 			{
 				data.socketAlive = false;
-				server->closeClientSocket(data);
-				terminateServer = true;
-				ExitThread(0);
 			}
 
 			if (data.socketAlive) { server->sendReply(data); }
 		}
 	}
+
+	server->closeClientSocket(data);
+	ExitThread(0);
 }
 
 PostRequest ProcessPostRequest(const std::string& request)
@@ -73,16 +65,7 @@ PostRequest ProcessPostRequest(const std::string& request)
 	std::string topic = request.substr(5, (endOfTopic - 1) - request.find('@'));
 	std::string message = request.substr(endOfTopic + 1);
 
-	return { topic, message };
-}
-
-ReadRequest ProcessReadRequest(const std::string& request)
-{
-	int endOfTopic = request.find('#');
-	std::string topic = request.substr(5, (endOfTopic - 1) - request.find('@'));
-	unsigned int messageNumber = std::stoi(request.substr(endOfTopic + 1));
-
-	return { topic, messageNumber };
+	return {topic, message};
 }
 
 std::string Parse(const std::string& incomingReq)
@@ -90,13 +73,15 @@ std::string Parse(const std::string& incomingReq)
 	if (incomingReq.find("POST@") != std::string::npos)
 	{
 		PostRequest postRequest = ProcessPostRequest(incomingReq);
-		
+
+
+		// process post
 		return "0";
 	}
 
 	if (incomingReq.find("READ") != std::string::npos)
 	{
-		ReadRequest readRequest = ProcessReadRequest(incomingReq);
+		// process read
 		return "0";
 	}
 

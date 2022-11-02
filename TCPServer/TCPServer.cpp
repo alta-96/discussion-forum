@@ -150,15 +150,17 @@ void TCPServer::receiveData(ReceivedSocketData &ret, bool blocking)
 		{
 			recvbuf[iResult] = '\0';
 			ret.request = std::string(recvbuf);
+			ret.socketAlive = true;
 		}
-		//	else if (iResult == 0)
-		//	{
-		//		recvbuf[iResult] = '\0';
-		//		printf("Received empty string. Terminating server.\n");
-		//		ret.request = "";
-		//	}
+		else if (iResult == 0)
+		{
+			recvbuf[iResult] = '\0';
+			ret.socketAlive = false;
+			ret.request = "";
+		}
 		else if (iResult < 0)
 		{
+			ret.socketAlive = false;
 			int SocketError = WSAGetLastError();
 
 			if (SocketError == WSAESHUTDOWN || SocketError == WSAECONNRESET || SocketError == WSAECONNABORTED || SocketError == WSAENETRESET) //connection has been closed, terminated, aborted or reset
@@ -189,10 +191,11 @@ int TCPServer::sendReply(ReceivedSocketData reply)
 	{
 		printf("send failed with error: %d\n", WSAGetLastError());
 		closesocket(reply.ClientSocket);
+		reply.socketAlive = false;
 		WSACleanup();
 		return 1;
 	}
-
+	reply.socketAlive = false;
 	return iSendResult;
 }
 
