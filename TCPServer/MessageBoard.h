@@ -9,8 +9,6 @@
 #include <vector>
 #include <shared_mutex>
 
-// Singleton MessageBoard class
-
 class MessageBoard {
 
 private:
