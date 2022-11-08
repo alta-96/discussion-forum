@@ -1,22 +1,43 @@
 #include "MessageBoard.h"
 
-
-//MessageBoard* MessageBoard::messageBoardInstance{ nullptr };
-//std::mutex MessageBoard::mbMutex;
-
+// Static init
+std::mutex MessageBoard::mbMutex;
 std::unordered_map<std::string, std::vector<std::string>>* MessageBoard::messageBoard
 {
 	new std::unordered_map<std::string, std::vector<std::string>>
 };
 
+// POST to the messageBoard 
+/* 
+ * Because of the nature of the data-structure used to store messages (map);
+ * If the topic does not exist in the map,
+ * when attempting to index via it with the topic as the key,
+ * the topic will automatically be created if key not already present in map.
+ */
 std::string MessageBoard::Post(const std::string& topic, const std::string& messageBody)
 {
-	return "0";
+	const std::lock_guard<std::mutex> mbLock(mbMutex);
+
+	// Truncate topic or message to first 140 characters
+	const auto truncatedTopic = topic.substr(140);
+	const auto truncatedMessageBody = messageBody.substr(140);
+
+	(*messageBoard)[truncatedTopic].push_back(truncatedMessageBody);
+	return std::to_string((*messageBoard)[truncatedTopic].size());
 }
 
+// READ from the messageBoard 
 std::string MessageBoard::Read(const std::string topic, unsigned int messageNumber)
 {
-	return "0";
+	const std::lock_guard<std::mutex> mbLock(mbMutex);
+
+	// If topic doesn't exist
+	if (messageBoard->find(topic) == messageBoard->end()) { return ""; }
+
+	// If requested message number is out of scope
+	if (((*messageBoard)[topic].size() - 1) < messageNumber) { return ""; }
+
+	return (*messageBoard)[topic].at(messageNumber);
 }
 
 

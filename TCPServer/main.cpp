@@ -5,6 +5,7 @@
 #include "TCPServer.h"
 
 #define DEFAULT_PORT 12345
+#define MAX_MESSAGES_PER_TOPIC 1000000
 
 bool terminateServer = false;
 
@@ -35,7 +36,18 @@ ReadRequest ProcessReadRequest(const std::string& request)
 {
 	int endOfTopic = request.find('#');
 	std::string topic = request.substr(5, (endOfTopic - 1) - request.find('@'));
-	unsigned int messageNumber = std::stoi(request.substr(endOfTopic + 1));
+	unsigned int messageNumber;
+
+	// Try convert string to positive integer
+	try
+	{
+		messageNumber = std::stoi(request.substr(endOfTopic + 1));
+	}
+	catch (...)
+	{
+		messageNumber = MAX_MESSAGES_PER_TOPIC;
+	}
+	
 
 	return { topic, messageNumber };
 }
@@ -78,7 +90,7 @@ void HandleClientRequests(TCPServer* server, ReceivedSocketData&& data)
 {
 	while (data.socketAlive)
 	{
-		server->receiveData(data, 0);
+		server->receiveData(data, 1);
 		if (data.socketAlive)
 		{
 			if (data.request != "EXIT" || data.request != "exit")

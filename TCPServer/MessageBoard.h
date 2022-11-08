@@ -10,6 +10,7 @@
 class MessageBoard {
 
 private:
+    static std::mutex mbMutex;
     static std::unordered_map<std::string, std::vector<std::string>>* messageBoard;
 
 public:
