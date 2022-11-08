@@ -5,7 +5,6 @@
 #include "TCPServer.h"
 
 #define DEFAULT_PORT 12345
-#define MAX_MESSAGES_PER_TOPIC 1000000
 
 bool terminateServer = false;
 
@@ -39,6 +38,8 @@ ReadRequest ProcessReadRequest(const std::string& request)
 	unsigned int messageNumber;
 
 	// Try convert string to positive integer
+	// If conversion results in integer overflow,
+	// limit to max messages per topic (1 million).
 	try
 	{
 		messageNumber = std::stoi(request.substr(endOfTopic + 1));
@@ -58,26 +59,16 @@ std::string ParseRequest(const std::string& incomingReq)
 	if (incomingReq.find("POST@") != std::string::npos)
 	{
 		PostRequest postRequest = ProcessPostRequest(incomingReq);
-		
 		return MessageBoard::Post(postRequest.topic, postRequest.message);
 	}
 
-	if (incomingReq.find("LIST@") != std::string::npos)
-	{
-		// process list request
-		return "0";
-	}
+	if (incomingReq.find("LIST") != std::string::npos) { return MessageBoard::List(); }
 
-	if (incomingReq.find("COUNT@") != std::string::npos)
-	{
-		// process count request
-		return "0";
-	}
+	if (incomingReq.find("COUNT@") != std::string::npos) { return MessageBoard::Count(incomingReq.substr(6)); }
 
 	if (incomingReq.find("READ@") != std::string::npos)
 	{
 		ReadRequest readRequest = ProcessReadRequest(incomingReq);
-
 		return MessageBoard::Read(readRequest.topic, readRequest.messageNumber);
 	}
 
