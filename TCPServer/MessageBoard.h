@@ -1,16 +1,18 @@
 #ifndef __MESSAGE_BOARD_H
 #define __MESSAGE_BOARD_H
+
+#define MAX_POST_LENGTH 140
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include <mutex>
+#include <shared_mutex>
 
 // Singleton MessageBoard class
 
 class MessageBoard {
 
 private:
-    static std::mutex mbMutex;
+    static std::shared_mutex mbMutex;
     static std::unordered_map<std::string, std::vector<std::string>>* messageBoard;
 
 public:
