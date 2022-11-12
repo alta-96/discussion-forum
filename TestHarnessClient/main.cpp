@@ -1,78 +1,128 @@
-#include <chrono>
+#include <iomanip>
 #include <iostream>
-#include <random>
+#include <string>
 #include <thread>
+#include <vector>
 
 #include "TCPClient.h"
 
-#define DEFAULT_PORT 12345
+#define SERVER_PORT 12345
+#define MAX_THREADS_PER_READER_WRITER 16
 
-std::string GetPostRequest(std::string::size_type length);
-void sendReadReq();
-
-int main()
+// The helper message is returned when invalid number of args are provided
+void sendHelperMessage()
 {
-    std::vector<std::thread> post_req_threads;
-
-    for (int i = 0; i < 2; i++) {
-        post_req_threads.emplace_back(std::thread(&sendReadReq));
-    }
-
-    for (auto& t : post_req_threads)
-    {
-        t.join();
-    }
+	std::cout << std::right
+	<< "\nRequires at least 5 arguments to run!\n"
+	<< "Usage: \nTestHarnessClient.exe server_ip number_of_poster_threads number_of_reader_threads time_duration throttle(0|1) \n\n"
+	<< std::setw(25) << "server_ip" << std::setw(20) << " - IP of server (localhost or 127.0.0.1 if running locally)\n"
+	<< std::setw(25) << "number_of_poster_threads" << std::setw(20) << " - The number of threads performing POST operations\n"
+	<< std::setw(25) << "number_of_reader_threads" << std::setw(20) << " - The number of threads performing READ operations\n"
+	<< std::setw(25) << "time_duration" << std::setw(20) << " - How long you want the Test-Harness to run for (seconds)\n"
+	<< std::setw(25) << "throttle(0|1)" << std::setw(20) << " - 0: no throttling\n"
+	<< std::setw(25)<< "" << std::setw(20) << " - 1: throttle to 1,000 requests per second" << std::endl;
 }
 
-void sendReadReq()
+// Casts the cmd-line parsed argument to unsigned integers
+unsigned int castThreadArgToUnsignedInt(char* str, bool isThread)
 {
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    std::cout << "Spinning up POST Thread: " << std::this_thread::get_id() << std::endl;
-    TCPClient client("localhost", DEFAULT_PORT);
-    std::string request = "";
+	unsigned int parsedStringToUInt = static_cast<unsigned int>(std::stoull(str));
 
-    auto start = std::chrono::system_clock::now();
-    int secondsToRunTest = 10;
-    int msgCount = 0;
+	// If cmd-line arg is a thread count, limit to max threads
+	if (isThread && parsedStringToUInt > MAX_THREADS_PER_READER_WRITER)
+	{
+		parsedStringToUInt = MAX_THREADS_PER_READER_WRITER;
+	}
 
-    client.OpenConnection();
-
-    while ((std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start).count() <=
-        secondsToRunTest))
-    {
-        std::string post_request = GetPostRequest(10);
-        client.send(post_request);
-        msgCount++;
-    }
-    client.send("EXIT");
-    std::cout << "POST Thread: " << std::this_thread::get_id() << " Sent " << msgCount << " in "
-        << std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start).count()
-        << "seconds " << std::endl;
-
-    std::cin;
+	return parsedStringToUInt;
 }
 
-
-std::string random_string(std::string::size_type length)
+// The multi-threaded poster entry function for each poster thread
+void MultiThreadedPosterFunction(
+	const std::string& serverAddress,
+	unsigned int runDuration,
+	bool throttle)
 {
-    // Constant look-up table
-    static auto& chrs = "0123456789"
-        "abcdefghijklmnopqrstuvwxyz"
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+	TCPClient client(serverAddress, SERVER_PORT);
+	unsigned int currentThreadPostReqCount = 0;
 
-    thread_local static std::mt19937 rg{ std::random_device{}() };
-    thread_local static std::uniform_int_distribution<std::string::size_type> pick(0, sizeof(chrs) - 2);
+	client.OpenConnection();
 
-    std::string s;
-    s.reserve(length);
 
-    while (length--)
-        s += chrs[pick(rg)];
-
-    return s;
+	client.CloseConnection();
 }
 
-std::string GetPostRequest(std::string::size_type length)
+// The multi-threaded reader entry function for each reader thread
+void MultiThreadedReaderFunction(
+	const std::string& serverAddress,
+	unsigned int runDuration,
+	bool throttle)
 {
-    return std::string("POST@") + random_string(length) + std::string("#") + random_string(length);
+	TCPClient client(serverAddress, SERVER_PORT);
+	unsigned int currentThreadReadReqCount = 0;
+
+	client.OpenConnection();
+
+
+	client.CloseConnection();
+}
+
+int main(int argc, char **argv)
+{
+	// Optimal max supported threads without significant performance loss
+	const unsigned int maxThreads = std::thread::hardware_concurrency();
+
+	std::vector<std::thread> posters;
+	std::vector<std::thread> readers;
+	
+	std::cout << "Test-Harness Client" << std::endl;
+	if (argc < 6) { sendHelperMessage(); return 0; } // Handle invalid args
+
+	// Parse cmd-line arguments
+	const std::string serverAddress = argv[1];
+	const unsigned int posterThreads = castThreadArgToUnsignedInt(argv[3], true);
+	const unsigned int readerThreads = castThreadArgToUnsignedInt(argv[4], true);
+	const unsigned int duration = castThreadArgToUnsignedInt(argv[5] ,false);
+	const bool throttle = castThreadArgToUnsignedInt(argv[6], false) > 0; // treat anything > 0 as true
+
+	// Hardware concurrency limit warning
+	if ((posterThreads + readerThreads) > maxThreads)
+	{
+		std::cout << "\n[WARN]: " << std::endl;
+		std::cout << "You are running the Test-Harness with a total of "
+				  << posterThreads + readerThreads << " threads." << std::endl;
+
+		std::cout << "Your system optimally performs at " << maxThreads << std::endl;
+		std::cout << "This will massively hinder performance...\n " << std::endl;
+	}
+
+	// Setup poster threads
+	if (posterThreads > 0)
+	{
+		std::cout << "Setting up " << posterThreads << " poster threads..." << std::endl;
+
+		for (unsigned int i = 0; i < posterThreads; i++)
+		{
+			posters.emplace_back(&MultiThreadedPosterFunction, &serverAddress, duration, throttle);
+		}
+	}
+
+	// Setup reader threads
+	if (readerThreads > 0)
+	{
+		std::cout << "Setting up " << readerThreads << " reader threads..." << std::endl;
+
+		for (unsigned int i = 0; i < readerThreads; i++)
+		{
+			posters.emplace_back(&MultiThreadedReaderFunction, &serverAddress, duration, throttle);
+		}
+	}
+
+	// Cleanup threads
+	for (auto &thread : posters){ thread.join(); }
+	for (auto &thread : readers){ thread.join(); }
+
+	std::cout << "\npress enter to continue...";
+	std::cin.get();
+	return 0;
 }

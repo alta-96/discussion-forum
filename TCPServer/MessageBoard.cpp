@@ -8,12 +8,6 @@ std::unordered_map<std::string, std::vector<std::string>>* MessageBoard::message
 };
 
 // POST to the messageBoard 
-/* 
- * Because of the nature of the data-structure used to store messages (map);
- * If the topic does not exist in the map,
- * when attempting to index via it with the topic as the key,
- * the topic will automatically be created if key not already present in map.
- */
 std::string MessageBoard::Post(const std::string& topic, const std::string& messageBody)
 {
 	const std::lock_guard<std::shared_mutex> mbLock(mbMutex);
@@ -34,6 +28,7 @@ std::string MessageBoard::Post(const std::string& topic, const std::string& mess
 		}
 	}
 
+	// Topic will automatically be created if key not already present in map.
 	(*messageBoard)[truncatedTopic].push_back(truncatedMessageBody);
 	return std::to_string((*messageBoard)[truncatedTopic].size() - 1);
 }
