@@ -19,10 +19,9 @@ Author: Alexander Ashley (B7034209@exchange.shu.ac.uk)
 
 ## **Table of Contents**
 - [**DiscussionForum**](#discussionforum)
-  - [**Table of Contents**](#table-of-contents)
-  - [**Building both the TCP Server & Test-Harness**](#building-both-the-tcp-server--test-harness)
-  - [**Running the TCP Server**](#running-the-tcp-server)
-  - [**Running the Test-Harness**](#running-the-test-harness)
+- [**Building both the TCP Server & Test-Harness**](#building-both-the-tcp-server--test-harness)
+- [**Running the TCP Server**](#running-the-tcp-server)
+- [**Running the Test-Harness**](#running-the-test-harness)
 ___
 
 
