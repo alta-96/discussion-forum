@@ -3,11 +3,26 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <chrono>
+#include <map>
+#include <mutex>
+#include <random>
+#include <sstream>
 
 #include "TCPClient.h"
 
 #define SERVER_PORT 12345
 #define MAX_THREADS_PER_READER_WRITER 16
+
+std::vector<std::thread> posters;
+std::vector<std::thread> readers;
+
+std::map<const std::string, const unsigned int> resultMap;
+
+std::string serverAddress;
+std::mutex threadMutex;
+unsigned int duration = 0;
+bool throttle = false;
 
 // The helper message is returned when invalid number of args are provided
 void sendHelperMessage()
@@ -37,34 +52,116 @@ unsigned int castThreadArgToUnsignedInt(char* str, bool isThread)
 	return parsedStringToUInt;
 }
 
+unsigned int generateThreadSafeRandom(const unsigned int max)
+{
+	static thread_local std::mt19937 generator;
+	return std::uniform_int_distribution<unsigned int>{5, max}(generator);
+}
+
+struct TopicMsgStruct
+{
+	std::string topic;
+	std::string msg;
+
+	TopicMsgStruct(const std::string& _topic, const std::string& _msg): topic(_topic), msg(_msg) {}
+};
+// Random topic/message generator for POST/READ requests
+TopicMsgStruct generateTopicMsg(bool generateMessage)
+{
+	const int topicMaxLength = 70;
+	const int messageMaxLength = 140;
+
+	static const char availableChars[] =
+		"abcdefghijklmnopqrstuvwxyz"
+		"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+		"0123456789";
+	std::string tempTopic, tempMessage;
+	tempTopic.reserve(topicMaxLength);
+	tempMessage.reserve(messageMaxLength);
+
+	for (int i = 0; i < generateThreadSafeRandom(topicMaxLength); i++)
+	{
+		tempTopic += availableChars[generateThreadSafeRandom( sizeof(availableChars) - 1)];
+	}
+
+	if (generateMessage)
+	{
+		for (int i = 0; i < generateThreadSafeRandom(messageMaxLength); i++)
+		{
+			tempMessage += availableChars[generateThreadSafeRandom(sizeof(availableChars) - 1)];
+		}
+	}
+	return{ tempTopic, tempMessage };
+}
+
+
 // The multi-threaded poster entry function for each poster thread
-void MultiThreadedPosterFunction(
-	const std::string& serverAddress,
-	unsigned int runDuration,
-	bool throttle)
+void MultiThreadedPosterFunction()
 {
 	TCPClient client(serverAddress, SERVER_PORT);
 	unsigned int currentThreadPostReqCount = 0;
+	auto startPoint = std::chrono::system_clock::now();
+	auto threadId = std::this_thread::get_id();
+	const auto postReq = std::string("POST@");
 
 	client.OpenConnection();
 
+	while (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - startPoint).count() <=
+		duration)
+	{
+		TopicMsgStruct topicMsgStruct = generateTopicMsg(false);
+
+		client.send(postReq + topicMsgStruct.topic + '#' + topicMsgStruct.msg);
+		currentThreadPostReqCount++;
+	}
+
+	threadMutex.lock();
+
+	std::stringstream key;
+	key << "POST" << threadId;
+	resultMap.insert({key.str(), currentThreadPostReqCount});
+
+	threadMutex.unlock();
 
 	client.CloseConnection();
 }
 
 // The multi-threaded reader entry function for each reader thread
-void MultiThreadedReaderFunction(
-	const std::string& serverAddress,
-	unsigned int runDuration,
-	bool throttle)
+void MultiThreadedReaderFunction()
 {
 	TCPClient client(serverAddress, SERVER_PORT);
 	unsigned int currentThreadReadReqCount = 0;
+	auto startPoint = std::chrono::system_clock::now();
+	auto threadId = std::this_thread::get_id();
+	const auto readReq = std::string("READ@");
 
 	client.OpenConnection();
 
+	while (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - startPoint).count() <=
+		duration)
+	{
+		TopicMsgStruct topicMsgStruct = generateTopicMsg(false);
+
+		client.send(readReq + topicMsgStruct.topic);
+		currentThreadReadReqCount++;
+	}
+
+	threadMutex.lock();
+
+	std::stringstream key;
+	key << "READ" << threadId;
+	resultMap.insert({ key.str(), currentThreadReadReqCount });
+
+	threadMutex.unlock();
 
 	client.CloseConnection();
+}
+
+void ProcessResultFindings(
+	const std::vector<unsigned>& vector,
+	const std::vector<unsigned>& read_results)
+{
+	
 }
 
 int main(int argc, char **argv)
@@ -72,18 +169,18 @@ int main(int argc, char **argv)
 	// Optimal max supported threads without significant performance loss
 	const unsigned int maxThreads = std::thread::hardware_concurrency();
 
-	std::vector<std::thread> posters;
-	std::vector<std::thread> readers;
-	
-	std::cout << "Test-Harness Client" << std::endl;
 	if (argc < 6) { sendHelperMessage(); return 0; } // Handle invalid args
 
 	// Parse cmd-line arguments
-	const std::string serverAddress = argv[1];
-	const unsigned int posterThreads = castThreadArgToUnsignedInt(argv[3], true);
-	const unsigned int readerThreads = castThreadArgToUnsignedInt(argv[4], true);
-	const unsigned int duration = castThreadArgToUnsignedInt(argv[5] ,false);
-	const bool throttle = castThreadArgToUnsignedInt(argv[6], false) > 0; // treat anything > 0 as true
+	serverAddress = argv[1];
+	const unsigned int posterThreads = castThreadArgToUnsignedInt(argv[2], true);
+	const unsigned int readerThreads = castThreadArgToUnsignedInt(argv[3], true);
+	duration = castThreadArgToUnsignedInt(argv[4] ,false);
+	throttle = castThreadArgToUnsignedInt(argv[5], false) > 0; // treat anything > 0 as true
+
+	std::cout << "Running Test-Harness Client for " 
+		<< duration << " seconds on " << posterThreads << " poster threads & "
+		<< readerThreads << " reader threads. Throttle: " << throttle << std::endl;
 
 	// Hardware concurrency limit warning
 	if ((posterThreads + readerThreads) > maxThreads)
@@ -96,6 +193,8 @@ int main(int argc, char **argv)
 		std::cout << "This will massively hinder performance...\n " << std::endl;
 	}
 
+
+
 	// Setup poster threads
 	if (posterThreads > 0)
 	{
@@ -103,7 +202,7 @@ int main(int argc, char **argv)
 
 		for (unsigned int i = 0; i < posterThreads; i++)
 		{
-			posters.emplace_back(&MultiThreadedPosterFunction, &serverAddress, duration, throttle);
+			posters.emplace_back(&MultiThreadedPosterFunction);
 		}
 	}
 
@@ -114,13 +213,32 @@ int main(int argc, char **argv)
 
 		for (unsigned int i = 0; i < readerThreads; i++)
 		{
-			posters.emplace_back(&MultiThreadedReaderFunction, &serverAddress, duration, throttle);
+			posters.emplace_back(&MultiThreadedReaderFunction);
 		}
 	}
 
 	// Cleanup threads
 	for (auto &thread : posters){ thread.join(); }
 	for (auto &thread : readers){ thread.join(); }
+
+	// Process results
+	std::vector<unsigned int> postResults;
+	std::vector<unsigned int> readResults;
+
+	for(std::pair<const std::string, const unsigned int>& result : resultMap)
+	{
+		if (result.first.find("POST"))
+		{
+			postResults.push_back(result.second);
+		}
+
+		if (result.first.find("READ"))
+		{
+			readResults.push_back(result.second);
+		}
+	}
+
+	ProcessResultFindings(postResults, readResults);
 
 	std::cout << "\npress enter to continue...";
 	std::cin.get();
