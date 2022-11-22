@@ -6,6 +6,7 @@
 #include <chrono>
 #include <map>
 #include <mutex>
+#include <numeric>
 #include <random>
 #include <sstream>
 
@@ -161,20 +162,46 @@ void ProcessResultFindings(
 	const std::vector<unsigned>& postResults,
 	const std::vector<unsigned>& readResults)
 {
-	std::cout << "Post Results:" << std::endl;
+	std::cout << "---------------------------------" << std::endl;
+	std::cout << "--------- R E S U L T S ---------" << std::endl;
+	std::cout << "---------------------------------" << std::endl;
+	
+	const unsigned int totalPostRequests = std::accumulate(postResults.begin(), postResults.end(), 0);
+	const unsigned int totalReadRequests = std::accumulate(readResults.begin(), readResults.end(), 0);
 
-	for (int i = 0; i < postResults.size(); i++)
+	if (totalPostRequests > 0)
 	{
-		std::cout << "\tPoster Thread " << (i + 1) << ":" << std::endl;
-		std::cout << "\t\tTotal Requests: " << postResults[i] << std::endl;
+		std::cout << "\nOverall POST results [Ran for " << duration << " seconds]:" << std::endl;
+
+		std::cout << "\tTotal requests: " << totalPostRequests << std::endl;
+		std::cout << "\tAverage requests per second: " << totalPostRequests / duration << std::endl;
+
+		std::cout << "\nSpecific thread data:" << std::endl;
+
+		for (int i = 0; i < postResults.size(); i++)
+		{
+			std::cout << "\tPoster Thread " << (i + 1) << ":" << std::endl;
+			std::cout << "\t\tTotal Requests: " << postResults[i] << std::endl;
+		}
+	} else
+	{
+		std::cout << "\nNo Post requests were made..." << std::endl;
 	}
 
-	std::cout << "Read Results:" << std::endl;
-	for (int i = 0; i < readResults.size(); i++)
+	if (totalReadRequests > 0)
 	{
-		std::cout << "\tReader Thread " << (i + 1) << ":" << std::endl;
-		std::cout << "\t\tTotal Requests: " << readResults[i] << std::endl;
+		std::cout << "\nOverall POST results [Ran for " << duration << " seconds]:" << std::endl;
+		for (int i = 0; i < readResults.size(); i++)
+		{
+			std::cout << "\tReader Thread " << (i + 1) << ":" << std::endl;
+			std::cout << "\t\tTotal Requests: " << readResults[i] << std::endl;
+		}
+	} else
+	{
+		std::cout << "\nNo Read requests were made..." << std::endl;
 	}
+
+	
 }
 
 int main(int argc, char **argv)
@@ -209,8 +236,6 @@ int main(int argc, char **argv)
 	// Setup poster threads
 	if (posterThreads > 0)
 	{
-		std::cout << "Setting up " << posterThreads << " poster threads..." << std::endl;
-
 		for (unsigned int i = 0; i < posterThreads; i++)
 		{
 			posters.emplace_back(&MultiThreadedPosterFunction);
@@ -220,11 +245,9 @@ int main(int argc, char **argv)
 	// Setup reader threads
 	if (readerThreads > 0)
 	{
-		std::cout << "Setting up " << readerThreads << " reader threads..." << std::endl;
-
 		for (unsigned int i = 0; i < readerThreads; i++)
 		{
-			posters.emplace_back(&MultiThreadedReaderFunction);
+			readers.emplace_back(&MultiThreadedReaderFunction);
 		}
 	}
 
@@ -238,12 +261,12 @@ int main(int argc, char **argv)
 
 	for(std::pair<const std::string, const unsigned int>& result : resultMap)
 	{
-		if (result.first.find("POST"))
+		if (result.first.find("POST") != std::string::npos)
 		{
 			postResults.push_back(result.second);
 		}
 
-		if (result.first.find("READ"))
+		if (result.first.find("READ") != std::string::npos)
 		{
 			readResults.push_back(result.second);
 		}
