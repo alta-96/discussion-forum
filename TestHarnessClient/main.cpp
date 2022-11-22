@@ -158,10 +158,23 @@ void MultiThreadedReaderFunction()
 }
 
 void ProcessResultFindings(
-	const std::vector<unsigned>& vector,
-	const std::vector<unsigned>& read_results)
+	const std::vector<unsigned>& postResults,
+	const std::vector<unsigned>& readResults)
 {
-	
+	std::cout << "Post Results:" << std::endl;
+
+	for (int i = 0; i < postResults.size(); i++)
+	{
+		std::cout << "\tPoster Thread " << (i + 1) << ":" << std::endl;
+		std::cout << "\t\tTotal Requests: " << postResults[i] << std::endl;
+	}
+
+	std::cout << "Read Results:" << std::endl;
+	for (int i = 0; i < readResults.size(); i++)
+	{
+		std::cout << "\tReader Thread " << (i + 1) << ":" << std::endl;
+		std::cout << "\t\tTotal Requests: " << readResults[i] << std::endl;
+	}
 }
 
 int main(int argc, char **argv)
@@ -169,7 +182,7 @@ int main(int argc, char **argv)
 	// Optimal max supported threads without significant performance loss
 	const unsigned int maxThreads = std::thread::hardware_concurrency();
 
-	if (argc < 6) { sendHelperMessage(); return 0; } // Handle invalid args
+	if (argc != 6) { sendHelperMessage(); return 0; } // Handle invalid args
 
 	// Parse cmd-line arguments
 	serverAddress = argv[1];
@@ -192,8 +205,6 @@ int main(int argc, char **argv)
 		std::cout << "Your system optimally performs at " << maxThreads << std::endl;
 		std::cout << "This will massively hinder performance...\n " << std::endl;
 	}
-
-
 
 	// Setup poster threads
 	if (posterThreads > 0)
