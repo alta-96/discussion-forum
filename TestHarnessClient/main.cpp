@@ -11,17 +11,20 @@
 #include <sstream>
 
 #include "TCPClient.h"
+#include "ThreadBarrier.h"
 
 #define SERVER_PORT 12345
 #define MAX_THREADS_PER_READER_WRITER 16
 
+
 std::vector<std::thread> posters;
 std::vector<std::thread> readers;
 
-std::map<const std::string, const unsigned int> resultMap;
+std::map<const std::string, std::vector<int>> resultMap;
 
 std::string serverAddress;
 std::mutex threadMutex;
+ThreadBarrier* barrier;
 unsigned int duration = 0;
 bool throttle = false;
 
@@ -100,16 +103,31 @@ TopicMsgStruct generateTopicMsg(bool generateMessage)
 void MultiThreadedPosterFunction()
 {
 	TCPClient client(serverAddress, SERVER_PORT);
-	unsigned int currentThreadPostReqCount = 0;
-	auto startPoint = std::chrono::system_clock::now();
+	int currentThreadPostReqCount = 0;
 	auto threadId = std::this_thread::get_id();
 	const auto postReq = std::string("POST@");
+	std::vector<int> secondBySecondThreadResult;
+	int secondTracker = 1;
 
 	client.OpenConnection();
+	barrier->wait();
+	
+	auto startPoint = std::chrono::system_clock::now();
+	auto runningPoint = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - startPoint);
 
-	while (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - startPoint).count() <=
-		duration)
+	while (runningPoint.count() <= duration)
 	{
+		if (runningPoint.count() >= secondTracker)
+		{
+			secondTracker++;
+			secondBySecondThreadResult.push_back(currentThreadPostReqCount);
+			currentThreadPostReqCount = 0;
+		}
+
+		runningPoint = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - startPoint);
+
+		if (throttle && currentThreadPostReqCount == 1000) { continue; }
+
 		TopicMsgStruct topicMsgStruct = generateTopicMsg(false);
 
 		client.send(postReq + topicMsgStruct.topic + '#' + topicMsgStruct.msg);
@@ -120,7 +138,7 @@ void MultiThreadedPosterFunction()
 
 	std::stringstream key;
 	key << "POST" << threadId;
-	resultMap.insert({key.str(), currentThreadPostReqCount});
+	resultMap.insert({key.str(), secondBySecondThreadResult});
 
 	threadMutex.unlock();
 
@@ -131,16 +149,31 @@ void MultiThreadedPosterFunction()
 void MultiThreadedReaderFunction()
 {
 	TCPClient client(serverAddress, SERVER_PORT);
-	unsigned int currentThreadReadReqCount = 0;
-	auto startPoint = std::chrono::system_clock::now();
+	int currentThreadReadReqCount = 0;
 	auto threadId = std::this_thread::get_id();
 	const auto readReq = std::string("READ@");
+	std::vector<int> secondBySecondThreadResult;
+	int secondTracker = 1;
 
 	client.OpenConnection();
+	barrier->wait();
 
-	while (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - startPoint).count() <=
-		duration)
+	auto startPoint = std::chrono::system_clock::now();
+	auto runningPoint = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - startPoint);
+
+	while (runningPoint.count() <= duration)
 	{
+		if (runningPoint.count() >= secondTracker)
+		{
+			secondTracker++;
+			secondBySecondThreadResult.push_back(currentThreadReadReqCount);
+			currentThreadReadReqCount = 0;
+		}
+
+		runningPoint = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - startPoint);
+
+		if (throttle && currentThreadReadReqCount == 1000) { continue; }
+
 		TopicMsgStruct topicMsgStruct = generateTopicMsg(false);
 
 		client.send(readReq + topicMsgStruct.topic);
@@ -151,58 +184,70 @@ void MultiThreadedReaderFunction()
 
 	std::stringstream key;
 	key << "READ" << threadId;
-	resultMap.insert({ key.str(), currentThreadReadReqCount });
+	resultMap.insert({ key.str(), secondBySecondThreadResult });
 
 	threadMutex.unlock();
 
 	client.CloseConnection();
 }
 
-void ProcessResultFindings(
-	const std::vector<unsigned>& postResults,
-	const std::vector<unsigned>& readResults)
+void ProcessResultFindings(const std::map<const std::string, std::vector<int>>& map)
 {
-	std::cout << "---------------------------------" << std::endl;
-	std::cout << "--------- R E S U L T S ---------" << std::endl;
-	std::cout << "---------------------------------" << std::endl;
-	
-	const unsigned int totalPostRequests = std::accumulate(postResults.begin(), postResults.end(), 0);
-	const unsigned int totalReadRequests = std::accumulate(readResults.begin(), readResults.end(), 0);
+	std::cout << "\n\n\n------------------------------------------------------------------" << std::endl;
+	std::cout << "------------------------- R E S U L T S --------------------------" << std::endl;
+	std::cout << "------------------------------------------------------------------" << std::endl;
+	std::cout << "\nTest-Harness results after running for a total of " << duration << " seconds..." << std::endl;
+	unsigned int postThreadCount = 0;
+	unsigned int readThreadCount = 0;
+	unsigned int runningTotalPostReqs = 0;
+	unsigned int runningTotalReadReqs = 0;
 
-	if (totalPostRequests > 0)
+	for (auto& result : resultMap)
 	{
-		std::cout << "\nOverall POST results [Ran for " << duration << " seconds]:" << std::endl;
-
-		std::cout << "\tTotal requests: " << totalPostRequests << std::endl;
-		std::cout << "\tAverage requests per second: " << totalPostRequests / duration << std::endl;
-
-		std::cout << "\nSpecific thread data:" << std::endl;
-
-		for (int i = 0; i < postResults.size(); i++)
+		if (result.first.find("POST") != std::string::npos)
 		{
-			std::cout << "\tPoster Thread " << (i + 1) << ":" << std::endl;
-			std::cout << "\t\tTotal Requests: " << postResults[i] << std::endl;
+			const unsigned int totalPostRequestsForCurrentThread = std::accumulate(result.second.begin(), result.second.end(), 0);
+			runningTotalPostReqs += totalPostRequestsForCurrentThread;
+			std::cout << "\nPOST thread " << postThreadCount << " sent:" << " [id - " << result.first.substr(4) << "]" << std::endl;
+			postThreadCount++;
+			for(int i = 0; i < result.second.size(); i++)
+			{
+				std::cout << "\tSecond " << i << ": " << result.second[i] << " requests." << std::endl;
+			}
+			std::cout << "\t------------------------" << std::endl;
+			std::cout << "\tTotal: " << totalPostRequestsForCurrentThread << "." << std::endl;
+			std::cout << "\tAverage: " << 
+				static_cast<double>(totalPostRequestsForCurrentThread) / duration << " per second." << std::endl;
 		}
-	} else
-	{
-		std::cout << "\nNo Post requests were made..." << std::endl;
+
+		if (result.first.find("READ") != std::string::npos)
+		{
+			const unsigned int totalReadRequestsForCurrentThread = std::accumulate(result.second.begin(), result.second.end(), 0);
+			runningTotalReadReqs += totalReadRequestsForCurrentThread;
+			std::cout << "\nREAD thread " << readThreadCount << " sent:" << " [id - " << result.first.substr(4) << "]" << std::endl;
+			readThreadCount++;
+			for (int i = 0; i < result.second.size(); i++)
+			{
+				std::cout << "\tSecond " << i << ": " << result.second[i] << " requests." << std::endl;
+			}
+			std::cout << "\t------------------------" << std::endl;
+			std::cout << "\tTotal: " << totalReadRequestsForCurrentThread << "." << std::endl;
+			std::cout << "\tAverage: " << 
+				static_cast<double>(totalReadRequestsForCurrentThread) / duration << " per second." << std::endl;
+		}
 	}
 
-	if (totalReadRequests > 0)
-	{
-		std::cout << "\nOverall POST results [Ran for " << duration << " seconds]:" << std::endl;
-		for (int i = 0; i < readResults.size(); i++)
-		{
-			std::cout << "\tReader Thread " << (i + 1) << ":" << std::endl;
-			std::cout << "\t\tTotal Requests: " << readResults[i] << std::endl;
-		}
-	} else
-	{
-		std::cout << "\nNo Read requests were made..." << std::endl;
-	}
+	std::cout << "\nOverall:" << std::endl;
+	std::cout << "\tTotal requests: " << runningTotalPostReqs + runningTotalReadReqs << "." << std::endl;
+	std::cout << "\tTotal POST requests: "  << runningTotalPostReqs << "." << std::endl;
+	std::cout << "\tTotal READ requests: "  << runningTotalReadReqs << "." << std::endl;
 
-	
+	std::cout << "\n\tTotal average requests: " << 
+		static_cast<double>(runningTotalPostReqs + runningTotalReadReqs) / duration << " per second." << std::endl;
+	std::cout << "\tTotal average POST requests: " << static_cast<double>(runningTotalPostReqs) / duration << " per second." << std::endl;
+	std::cout << "\tTotal average READ requests: " << static_cast<double>(runningTotalReadReqs) / duration << " per second." << std::endl;
 }
+
 
 int main(int argc, char **argv)
 {
@@ -218,9 +263,11 @@ int main(int argc, char **argv)
 	duration = castThreadArgToUnsignedInt(argv[4] ,false);
 	throttle = castThreadArgToUnsignedInt(argv[5], false) > 0; // treat anything > 0 as true
 
+	barrier = new ThreadBarrier(posterThreads + readerThreads);
+
 	std::cout << "Running Test-Harness Client for " 
 		<< duration << " seconds on " << posterThreads << " poster threads & "
-		<< readerThreads << " reader threads. Throttle: " << throttle << std::endl;
+		<< readerThreads << " reader threads. Throttling: " << (throttle == 0 ? "disabled" : "enabled") << std::endl;
 
 	// Hardware concurrency limit warning
 	if ((posterThreads + readerThreads) > maxThreads)
@@ -256,23 +303,7 @@ int main(int argc, char **argv)
 	for (auto &thread : readers){ thread.join(); }
 
 	// Process results
-	std::vector<unsigned int> postResults;
-	std::vector<unsigned int> readResults;
-
-	for(std::pair<const std::string, const unsigned int>& result : resultMap)
-	{
-		if (result.first.find("POST") != std::string::npos)
-		{
-			postResults.push_back(result.second);
-		}
-
-		if (result.first.find("READ") != std::string::npos)
-		{
-			readResults.push_back(result.second);
-		}
-	}
-
-	ProcessResultFindings(postResults, readResults);
+	ProcessResultFindings(resultMap);
 
 	std::cout << "\npress enter to continue...";
 	std::cin.get();
