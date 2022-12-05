@@ -4,11 +4,13 @@
 #include <thread>
 #include <vector>
 #include <chrono>
+#include <fstream>
 #include <map>
 #include <mutex>
 #include <numeric>
 #include <random>
 #include <sstream>
+#include <sys/stat.h>
 
 #include "TCPClient.h"
 #include "ThreadBarrier.h"
@@ -199,8 +201,30 @@ void ProcessResultFindings(const std::map<const std::string, std::vector<int>>& 
 	std::cout << "\nTest-Harness results after running for a total of " << duration << " seconds..." << std::endl;
 	unsigned int postThreadCount = 0;
 	unsigned int readThreadCount = 0;
+
 	unsigned int runningTotalPostReqs = 0;
 	unsigned int runningTotalReadReqs = 0;
+
+	// create file if not already exists else find a free name for version of run.
+	const std::string resultsFullFileName = "test-harness-results-v";
+	unsigned int runVersion = 0;
+	struct stat buf;
+
+	// While file name taken, find a free file name for writing results of this run...
+	while(stat((resultsFullFileName + std::to_string(runVersion) + ".full" + ".csv").c_str(), &buf) != -1) { runVersion++; }
+
+	std::ofstream fullResultsFile;
+	std::ofstream minResultsFile;
+	
+	fullResultsFile.open(resultsFullFileName + std::to_string(runVersion) + ".full" + ".csv");
+	minResultsFile.open(resultsFullFileName + std::to_string(runVersion) + ".min" + ".txt");
+
+	fullResultsFile << ",SECONDS\n,";
+
+	for (int i = 0; i < duration; i++)
+	{
+		fullResultsFile << i << "s,";
+	}
 
 	for (auto& result : resultMap)
 	{
@@ -209,15 +233,29 @@ void ProcessResultFindings(const std::map<const std::string, std::vector<int>>& 
 			const unsigned int totalPostRequestsForCurrentThread = std::accumulate(result.second.begin(), result.second.end(), 0);
 			runningTotalPostReqs += totalPostRequestsForCurrentThread;
 			std::cout << "\nPOST thread " << postThreadCount << " sent:" << " [id - " << result.first.substr(4) << "]" << std::endl;
-			postThreadCount++;
+
+			fullResultsFile << "\nPOST-" << postThreadCount << ",";
+			minResultsFile << "\nPOST-" << postThreadCount << "\t" << totalPostRequestsForCurrentThread;
+
 			for(int i = 0; i < result.second.size(); i++)
 			{
 				std::cout << "\tSecond " << i << ": " << result.second[i] << " requests." << std::endl;
+				fullResultsFile << result.second[i] << ",";
 			}
+
+			fullResultsFile << "\n";
+			postThreadCount++;
+
 			std::cout << "\t------------------------" << std::endl;
+
 			std::cout << "\tTotal: " << totalPostRequestsForCurrentThread << "." << std::endl;
+			fullResultsFile << "Total," << totalPostRequestsForCurrentThread << "\n";
+			minResultsFile << "\nTOTAL\t" << totalPostRequestsForCurrentThread << "\n";
+
 			std::cout << "\tAverage: " << 
 				static_cast<double>(totalPostRequestsForCurrentThread) / duration << " per second." << std::endl;
+			fullResultsFile << "Avg," << static_cast<double>(totalPostRequestsForCurrentThread) / duration;
+			minResultsFile << "AVG\t" << static_cast<double>(totalPostRequestsForCurrentThread) / duration << "\n";
 		}
 
 		if (result.first.find("READ") != std::string::npos)
@@ -225,15 +263,29 @@ void ProcessResultFindings(const std::map<const std::string, std::vector<int>>& 
 			const unsigned int totalReadRequestsForCurrentThread = std::accumulate(result.second.begin(), result.second.end(), 0);
 			runningTotalReadReqs += totalReadRequestsForCurrentThread;
 			std::cout << "\nREAD thread " << readThreadCount << " sent:" << " [id - " << result.first.substr(4) << "]" << std::endl;
-			readThreadCount++;
+		
+			fullResultsFile << "\nREAD-" << readThreadCount << ",";
+			minResultsFile << "\nREAD-" << readThreadCount << "\t" << totalReadRequestsForCurrentThread;
+
 			for (int i = 0; i < result.second.size(); i++)
 			{
 				std::cout << "\tSecond " << i << ": " << result.second[i] << " requests." << std::endl;
+				fullResultsFile << result.second[i] << ",";
 			}
+
+			fullResultsFile << "\n";
+			readThreadCount++;
+
 			std::cout << "\t------------------------" << std::endl;
+
 			std::cout << "\tTotal: " << totalReadRequestsForCurrentThread << "." << std::endl;
+			fullResultsFile << "Total," << totalReadRequestsForCurrentThread << "\n";
+			minResultsFile << "\nTOTAL\t" << totalReadRequestsForCurrentThread << "\n";
+
 			std::cout << "\tAverage: " << 
 				static_cast<double>(totalReadRequestsForCurrentThread) / duration << " per second." << std::endl;
+			fullResultsFile << "Avg," << static_cast<double>(totalReadRequestsForCurrentThread) / duration;
+			minResultsFile << "AVG\t" << static_cast<double>(totalReadRequestsForCurrentThread) / duration << "\n";
 		}
 	}
 
@@ -246,6 +298,9 @@ void ProcessResultFindings(const std::map<const std::string, std::vector<int>>& 
 		static_cast<double>(runningTotalPostReqs + runningTotalReadReqs) / duration << " per second." << std::endl;
 	std::cout << "\tTotal average POST requests: " << static_cast<double>(runningTotalPostReqs) / duration << " per second." << std::endl;
 	std::cout << "\tTotal average READ requests: " << static_cast<double>(runningTotalReadReqs) / duration << " per second." << std::endl;
+
+	fullResultsFile.close();
+	minResultsFile.close();
 }
 
 
