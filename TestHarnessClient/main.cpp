@@ -295,9 +295,9 @@ void ProcessResultFindings(const std::map<const std::string, std::vector<int>>& 
 	std::cout << "\tTotal READ requests: "  << runningTotalReadReqs << "." << std::endl;
 
 	std::cout << "\n\tTotal average requests: " << 
-		static_cast<double>(runningTotalPostReqs + runningTotalReadReqs) / duration << " per second." << std::endl;
-	std::cout << "\tTotal average POST requests: " << static_cast<double>(runningTotalPostReqs) / duration << " per second." << std::endl;
-	std::cout << "\tTotal average READ requests: " << static_cast<double>(runningTotalReadReqs) / duration << " per second." << std::endl;
+		(static_cast<double>(runningTotalPostReqs + runningTotalReadReqs) / duration) / (postThreadCount + readThreadCount) << " per second." << std::endl;
+	std::cout << "\tTotal average POST requests: " << (static_cast<double>(runningTotalPostReqs) / duration) / postThreadCount << " per second." << std::endl;
+	std::cout << "\tTotal average READ requests: " << (static_cast<double>(runningTotalReadReqs) / duration) / readThreadCount << " per second." << std::endl;
 
 	fullResultsFile.close();
 	minResultsFile.close();
